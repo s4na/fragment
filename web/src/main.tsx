@@ -208,10 +208,18 @@ function App() {
 	useEffect(() => {
 		if (next && (filter.trim() || palette)) void work(listAll);
 	}, [next, filter, palette, listVersion]);
+	async function requestForView<T>(id: number, route: string, method = "GET", body?: unknown) {
+		try {
+			const value = await api<T>(route, method, body);
+			if (id === ticket.current) return value;
+		} catch (e) {
+			if (id === ticket.current) throw e;
+		}
+	}
 	async function load(p: string, k: Kind, path: string) {
 		const id = ++ticket.current;
-		const value = await api<Document>(`/api/document?${query(p, k, path)}`);
-		if (id !== ticket.current) return;
+		const value = await requestForView<Document>(id, `/api/document?${query(p, k, path)}`);
+		if (!value) return;
 		setDoc(value);
 		setDraft(value.content);
 		setHTML(value.html);
@@ -303,8 +311,8 @@ function App() {
 		if (pendingWork.current > 0 || !canLeave()) return;
 		const id = ticket.current;
 		void work(async () => {
-			const values = await api<{ projects: string[] }>("/api/projects");
-			if (id !== ticket.current) return;
+			const values = await requestForView<{ projects: string[] }>(id, "/api/projects");
+			if (!values) return;
 			setProjects(values.projects);
 			if (project) await list(project, kind);
 			if (id !== ticket.current) return;
@@ -318,17 +326,18 @@ function App() {
 		const id = ticket.current;
 		void work(async () => {
 			try {
-				await api(`/api/document?${query(project, kind, doc.path)}`, "PUT", {
+				await requestForView(id, `/api/document?${query(project, kind, doc.path)}`, "PUT", {
 					content: draft,
 					revision,
 				});
 			} catch (e) {
 				if (id !== ticket.current) return;
 				if (e instanceof APIError && e.code === "conflict") {
-					const value = await api<Document>(
+					const value = await requestForView<Document>(
+						id,
 						`/api/document?${query(project, kind, doc.path)}`,
 					);
-					if (id !== ticket.current) return;
+					if (!value) return;
 					setConflictDraft(draft);
 					setLatest(value);
 					throw new Error(conflictMessage);
@@ -416,10 +425,10 @@ function App() {
 		void work(async () => {
 			if (modal === "project") {
 				const projectName = name.trim();
-				await api("/api/projects", "POST", { project: projectName });
+				await requestForView(id, "/api/projects", "POST", { project: projectName });
 				if (id !== ticket.current) return;
-				const values = await api<{ projects: string[] }>("/api/projects");
-				if (id !== ticket.current) return;
+				const values = await requestForView<{ projects: string[] }>(id, "/api/projects");
+				if (!values) return;
 				setProjects(values.projects);
 				resetDocument();
 				setProject(projectName);
@@ -429,7 +438,7 @@ function App() {
 			} else {
 				const path = normalizeDocName(name);
 				if (!path) throw new Error("文書名を入力してください。");
-				await api(`/api/document?${query(project, kind, path)}`, "POST", {
+				await requestForView(id, `/api/document?${query(project, kind, path)}`, "POST", {
 					content: `# ${displayName(path)}\n\n`,
 				});
 				if (id !== ticket.current) return;

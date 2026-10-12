@@ -23,12 +23,14 @@ const suggestions = [
 ];
 
 export function Chat({
+	mod,
 	project,
 	onSaved,
 	onBusy,
 	onOpenDoc,
 	onClose,
 }: {
+	mod: string;
 	project: string;
 	onSaved: () => void;
 	onBusy: (busy: boolean) => void;
@@ -215,7 +217,7 @@ export function Chat({
 				/>
 				<div class="chat-form-foot">
 					<span class="muted">
-						<kbd>⌘</kbd>
+						<kbd>{mod}</kbd>
 						<kbd>Enter</kbd> で送信
 						{state.flow_path && <> · flow/{state.flow_path}</>}
 					</span>

@@ -94,6 +94,7 @@ function App() {
 	const ticket = useRef(0);
 	const previewTicket = useRef(0);
 	const documentList = useRef<DocumentList | null>(null);
+	const pendingWork = useRef(0);
 	const toastId = useRef(0);
 	const dialog = useRef<HTMLDialogElement>(null);
 	const reading = useRef<HTMLElement>(null);
@@ -133,6 +134,7 @@ function App() {
 		);
 	}
 	async function work(action: () => Promise<void>) {
+		++pendingWork.current;
 		setBusy(true);
 		setError("");
 		try {
@@ -140,7 +142,7 @@ function App() {
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
-			setBusy(false);
+			setBusy(--pendingWork.current > 0);
 		}
 	}
 	function canLeave() {
@@ -280,7 +282,7 @@ function App() {
 	}, []);
 
 	function refresh() {
-		if (!canLeave()) return;
+		if (pendingWork.current > 0 || !canLeave()) return;
 		void work(async () => {
 			setProjects(
 				(await api<{ projects: string[] }>("/api/projects")).projects,
@@ -519,7 +521,7 @@ function App() {
 			},
 			{ id: "chat", label: chatOpen ? "チャットを閉じる" : "チャットを開く", hint: `${mod}J`, run: () => toggleChat() },
 			{ id: "theme", label: dark ? "ライトテーマにする" : "ダークテーマにする", run: toggleTheme },
-			{ id: "refresh", label: "最新の状態に更新", run: refresh },
+			...(!busy ? [{ id: "refresh", label: "最新の状態に更新", run: refresh }] : []),
 			...projects
 				.filter((p) => p !== project)
 				.map((p) => ({
@@ -528,7 +530,7 @@ function App() {
 					run: () => navigate(p, kind),
 				})),
 		],
-		[kind, project, projects, chatOpen, dark, dirty, doc],
+		[kind, project, projects, chatOpen, dark, dirty, doc, busy],
 	);
 
 	const showToc = !editing && headings.length >= 2;
@@ -915,6 +917,7 @@ function App() {
 					<div class="chat-slot" hidden={!chatOpen}>
 						<Chat
 							key={project}
+							mod={mod}
 							project={project}
 							onSaved={() => setChatRefresh(true)}
 							onBusy={setChatBusy}

@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -145,29 +144,23 @@ func TestDesktopSharedStoreLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	parsed, err := url.Parse(opened.URL)
-	if err != nil || parsed.Query().Get("project") != project || opened.PID != pid {
+	if err != nil || parsed.Query().Get("project") != project || parsed.Fragment != "" || opened.PID != pid {
 		t.Fatalf("project opening: %+v %v", opened, err)
 	}
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar, Timeout: 3 * time.Second}
 	origin := parsed.Scheme + "://" + parsed.Host
-	login := func(link string, client *http.Client) int {
+	login := func(client *http.Client) int {
 		t.Helper()
-		u, _ := url.Parse(link)
-		fragment, _ := url.ParseQuery(u.Fragment)
-		body, _ := json.Marshal(map[string]string{"token": fragment.Get("token")})
-		request, _ := http.NewRequest("POST", origin+"/api/session", bytes.NewReader(body))
-		request.Header.Set("Origin", origin)
-		request.Header.Set("Content-Type", "application/json")
-		response, err := client.Do(request)
+		response, err := client.Get(origin + "/api/session")
 		if err != nil {
 			t.Fatal(err)
 		}
 		response.Body.Close()
 		return response.StatusCode
 	}
-	if login(opened.URL, client) != 200 {
-		t.Fatal("opening URL did not authenticate")
+	if login(client) != 200 {
+		t.Fatal("direct URL did not establish a session")
 	}
 	state := func() string {
 		t.Helper()
@@ -194,17 +187,17 @@ func TestDesktopSharedStoreLifecycle(t *testing.T) {
 	if err = json.Unmarshal(must(temp, "open", "--no-open", project), &opened); err != nil {
 		t.Fatal(err)
 	}
-	if opened.PID != pid || firstURL == opened.URL || state() != root {
+	if opened.PID != pid || firstURL != opened.URL || state() != root {
 		t.Fatal("reopen did not reuse a stable session")
 	}
 	otherJar, _ := cookiejar.New(nil)
 	otherClient := &http.Client{Jar: otherJar, Timeout: 3 * time.Second}
-	if login(opened.URL, otherClient) != 200 {
+	if login(otherClient) != 200 {
 		t.Fatal("reopening in another browser failed")
 	}
 	replayJar, _ := cookiejar.New(nil)
-	if login(opened.URL, &http.Client{Jar: replayJar, Timeout: 3 * time.Second}) != 401 {
-		t.Fatal("opening token reused")
+	if login(&http.Client{Jar: replayJar, Timeout: 3 * time.Second}) != 200 {
+		t.Fatal("the same URL must work in another fresh browser")
 	}
 	if out, err := run(elsewhere, "open", "missing", "--no-open"); err == nil || !strings.Contains(string(out), "not_found") {
 		t.Fatalf("missing project: %v %s", err, out)

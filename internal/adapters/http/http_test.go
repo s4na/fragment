@@ -51,7 +51,7 @@ func TestSessionWriteAndRead(t *testing.T) {
 	if w.Code != 401 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	w = request("POST", "/api/session", map[string]string{"token": s.bootstrap}, s.Origin, "")
+	w = request("GET", "/api/session", nil, "", "")
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
@@ -130,8 +130,7 @@ func TestSessionsAcrossPorts(t *testing.T) {
 	}
 	for _, server := range []*Server{one, two} {
 		u, _ := url.Parse(server.Origin)
-		body, _ := json.Marshal(map[string]string{"token": server.bootstrap})
-		r := httptest.NewRequest("POST", server.Origin+"/api/session", bytes.NewReader(body))
+		r := httptest.NewRequest("GET", server.Origin+"/api/session", nil)
 		r.Header.Set("Origin", server.Origin)
 		w := httptest.NewRecorder()
 		server.ServeHTTP(w, r)
@@ -205,7 +204,7 @@ func TestAuthenticatedChatPersistsSharedData(t *testing.T) {
 	if w := request("GET", "/api/chat?project=p", nil, ""); w.Code != 401 {
 		t.Fatal(w.Code)
 	}
-	w := request("POST", "/api/session", map[string]string{"token": s.bootstrap}, "")
+	w := request("GET", "/api/session", nil, "")
 	cookie = w.Result().Cookies()[0]
 	if w = request("POST", "/api/chat?project=p", map[string]string{"text": "保存して"}, ""); w.Code != 403 {
 		t.Fatal(w.Code, w.Body.String())
@@ -247,47 +246,83 @@ func TestAuthenticatedChatPersistsSharedData(t *testing.T) {
 	}
 }
 
-func TestDesktopOpeningTokens(t *testing.T) {
+func TestDirectLocalSessions(t *testing.T) {
 	st, err := storage.Init(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(&app.Service{Repo: st}, st.Root, "http://127.0.0.1:8787", "127.0.0.1:8787", nil)
-	first := s.SessionURL("設計 + #?")
-	second := s.SessionURL("")
-	parsed, err := url.Parse(first)
-	if err != nil || parsed.Query().Get("project") != "設計 + #?" {
-		t.Fatalf("project URL: %s %v", first, err)
+	assets, err := fs.Sub(web.Assets, "dist")
+	if err != nil {
+		t.Fatal(err)
 	}
-	token := func(link string) string {
-		u, _ := url.Parse(link)
-		q, _ := url.ParseQuery(u.Fragment)
-		return q.Get("token")
+	s := New(&app.Service{Repo: st}, st.Root, "http://127.0.0.1:8787", "127.0.0.1:8787", assets)
+	link := s.SessionURL("設計 + #?")
+	parsed, err := url.Parse(link)
+	if err != nil || parsed.Query().Get("project") != "設計 + #?" || parsed.Fragment != "" {
+		t.Fatalf("project URL: %s %v", link, err)
 	}
-	one, two := token(first), token(second)
-	if one == two || one == "" || two == "" {
-		t.Fatal("opening tokens must be independent")
+	if s.SessionURL("設計 + #?") != link || s.SessionURL("") != s.Origin+"/" {
+		t.Fatal("opening URLs must be stable without a token")
 	}
-	login := func(value string) int {
-		b, _ := json.Marshal(map[string]string{"token": value})
-		r := httptest.NewRequest("POST", s.Origin+"/api/session", bytes.NewReader(b))
-		r.Header.Set("Origin", s.Origin)
+	var oldCookie *http.Cookie
+	for _, server := range []*Server{s, s, New(s.Service, st.Root, s.Origin, s.Host, assets)} {
+		// Fresh browsers and an old browser after restart all establish a session.
+		r := httptest.NewRequest("GET", server.Origin+"/api/session", nil)
+		if oldCookie != nil {
+			r.AddCookie(oldCookie)
+		}
+		w := httptest.NewRecorder()
+		server.ServeHTTP(w, r)
+		if w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte("csrf")) {
+			t.Fatal("direct session failed", w.Code, w.Body.String())
+		}
+		cookies := w.Result().Cookies()
+		if len(cookies) != 1 || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode {
+			t.Fatal("missing browser session cookie", cookies)
+		}
+		oldCookie = cookies[0]
+		r = httptest.NewRequest("GET", server.Origin+"/api/state", nil)
+		r.AddCookie(oldCookie)
+		w = httptest.NewRecorder()
+		server.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatal("new session cannot read data", w.Code, w.Body.String())
+		}
+	}
+	for _, site := range []string{"cross-site", "same-site"} {
+		for _, path := range []string{"/api/session", "/api/state"} {
+			r := httptest.NewRequest("GET", s.Origin+path, nil)
+			r.Header.Set("Sec-Fetch-Site", site)
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, r)
+			if w.Code != 403 || len(w.Result().Cookies()) != 0 {
+				t.Fatal("external site obtained API access", site, path, w.Code)
+			}
+		}
+	}
+	for _, header := range []struct{ name, value string }{
+		{"Origin", "http://evil.test"},
+		{"Host", "evil.test"},
+	} {
+		r := httptest.NewRequest("GET", s.Origin+"/api/session", nil)
+		if header.name == "Host" {
+			r.Host = header.value
+		} else {
+			r.Header.Set(header.name, header.value)
+		}
 		w := httptest.NewRecorder()
 		s.ServeHTTP(w, r)
-		return w.Code
+		if w.Code != 403 || len(w.Result().Cookies()) != 0 {
+			t.Fatal("untrusted request obtained session", header.name, w.Code)
+		}
 	}
-	if login(one) != 200 || login(two) != 200 || login(one) != 401 {
-		t.Fatal("each opening must work once without invalidating another")
-	}
-	expired := token(s.SessionURL(""))
-	s.opening[expired] = time.Now().Add(-time.Second)
-	if login(expired) != 401 {
-		t.Fatal("expired opening token accepted")
-	}
-	for i := 0; i < 50; i++ {
-		s.SessionURL("")
-	}
-	if len(s.opening) > 32 {
-		t.Fatal("unconsumed opening URLs grow without a bound")
+	// A normal link from another site may open the UI, but not its data API.
+	r := httptest.NewRequest("GET", s.Origin+"/", nil)
+	r.Header.Set("Sec-Fetch-Site", "cross-site")
+	r.Header.Set("Sec-Fetch-Mode", "navigate")
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte("type=\"module\"")) {
+		t.Fatal("a direct link cannot open the UI", w.Code, w.Body.String())
 	}
 }

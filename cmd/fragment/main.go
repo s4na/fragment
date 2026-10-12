@@ -172,7 +172,7 @@ func serve(ctx context.Context, args []string, ready func(*httpadapter.Server) e
 			return err
 		}
 	} else {
-		fmt.Fprintln(os.Stderr, "fragment:", handler.BootstrapURL())
+		fmt.Fprintln(os.Stderr, "fragment:", handler.SessionURL(""))
 	}
 	done := make(chan struct{})
 	defer close(done)

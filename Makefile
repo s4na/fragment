@@ -1,4 +1,4 @@
-.PHONY: build web web-deps test lint lint-go lint-web clean
+.PHONY: build web web-deps check test test-go test-web lint lint-go lint-web clean
 
 web: web-deps
 	sfw pnpm --dir web build
@@ -9,9 +9,16 @@ web-deps:
 build: web
 	go build -o bin/fragment ./cmd/fragment
 
-test: web
+check: lint test
+
+test: test-go test-web
+
+test-go: web
 	go test -race ./...
 	go vet ./...
+
+test-web: web-deps
+	sfw pnpm --dir web test
 
 lint: lint-go lint-web
 

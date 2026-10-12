@@ -12,11 +12,14 @@ macOSのローカルディスクを対象に検証しています。開発には
 
 ```sh
 make build
-make lint
-make test
+make check
 ```
 
-`make build` はPreactの画面をビルドし、埋め込んだ実行ファイルを `bin/fragment` に作成します。フロントエンドのpnpmコマンドは `sfw` 経由で実行します。`make test` は画面のビルド、Goのrace検出付きテスト、`go vet` を実行します。
+`make build` はPreactの画面をビルドし、埋め込んだ実行ファイルを `bin/fragment` に作成します。フロントエンドのpnpmコマンドは `sfw` 経由で実行します。PRを出す前には `make check` を実行してください。lintとtestをローカルでまとめて実行し、どれか1つでも失敗するとコマンドも失敗します。
+
+`make test` はGoのrace検出付きテストと `go vet`、Web UIの自動テストを実行します。Go側は文書の読み書き、同時更新の競合、CLI・MCPの連携、HTTP、MarkdownのHTML表示などを確認します。Web側は文書取得・更新の通信、認証情報、競合時の再取得・リトライの案内、通信失敗の扱いを確認します。Webのテストは[Vitest](https://vitest.dev/guide/)で一回実行して終了し、ファイル監視は行いません。Goだけなら `make test-go`、Webだけなら `make test-web` で実行できます。
+
+Goの書き込みテストは実行中だけの一時フォルダを使い、終了後に削除します。利用者のDocuments配下の文書は変更しません。通常の `make check` はCodexの実際の推論を実行しません。
 
 `make lint` はローカルでコードをチェックします。Goの整形漏れ（`gofmt`）と不具合の兆候（`go vet`）、Web UIの問題（Biome）とTypeScriptの型エラーを調べ、問題があれば失敗します。コードの自動修正やアプリの起動は行いません。GitHub Actionsの設定は追加せず、PRを出す前に手元で実行する使い方です。Biomeは[公式の導入手順](https://biomejs.dev/installation/quick-start/)に従い、バージョンを固定しています。
 

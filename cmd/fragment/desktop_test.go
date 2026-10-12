@@ -25,6 +25,10 @@ import (
 
 func TestDesktopSharedStoreLifecycle(t *testing.T) {
 	temp := t.TempDir()
+	temp, err := filepath.EvalSymlinks(temp)
+	if err != nil {
+		t.Fatal(err)
+	}
 	binary := filepath.Join(temp, "fragment")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -50,7 +54,7 @@ func TestDesktopSharedStoreLifecycle(t *testing.T) {
 	root := filepath.Join(temp, "documents")
 	project := "設計 + #?"
 	must(temp, "config", "init", root)
-	root, err := filepath.EvalSymlinks(root)
+	root, err = filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +115,20 @@ func TestDesktopSharedStoreLifecycle(t *testing.T) {
 			t.Fatal("simultaneous opens started multiple servers")
 		}
 		pid = info.PID
+	}
+	configLink := filepath.Join(temp, "config-link")
+	if err := os.Symlink(filepath.Join(temp, "config"), configLink); err != nil {
+		t.Fatal(err)
+	}
+	for _, alias := range []string{configLink, temp + "/config/../config"} {
+		cmd := exec.CommandContext(ctx, binary, "open", project, "--no-open")
+		cmd.Env = append(env, "FRAGMENT_CONFIG_DIR="+alias)
+		cmd.Dir = elsewhere
+		out, err := cmd.CombinedOutput()
+		var aliased desktop.Info
+		if err != nil || json.Unmarshal(out, &aliased) != nil || aliased.PID != pid {
+			t.Fatalf("config alias must reuse daemon: %s %v %s", alias, err, out)
+		}
 	}
 	var opened desktop.Info
 	if err := json.Unmarshal(must(elsewhere, "open", project, "--no-open"), &opened); err != nil {
@@ -221,7 +239,11 @@ func TestDesktopSharedStoreLifecycle(t *testing.T) {
 	if out, err := run(elsewhere, "open", project, "--no-open"); err == nil || !strings.Contains(string(out), "config_changed") {
 		t.Fatalf("old project after config change: %v %s", err, out)
 	}
-	must(elsewhere, "stop")
+	aliasStop := exec.CommandContext(ctx, binary, "stop")
+	aliasStop.Env = append(env, "FRAGMENT_CONFIG_DIR="+configLink)
+	if out, err := aliasStop.CombinedOutput(); err != nil {
+		t.Fatalf("stop through config alias: %v %s", err, out)
+	}
 	if err = json.Unmarshal(must(temp, "status"), &status); err != nil || status.Running {
 		t.Fatalf("stop: %+v %v", status, err)
 	}

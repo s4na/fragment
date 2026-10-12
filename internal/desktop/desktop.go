@@ -38,6 +38,10 @@ func locations() (paths, error) {
 	if err != nil {
 		return paths{}, err
 	}
+	p, err = canonicalConfigPath(p)
+	if err != nil {
+		return paths{}, err
+	}
 	id := app.Revision([]byte(p))[:16]
 	base, err := runtimeBase()
 	if err != nil {
@@ -64,6 +68,32 @@ func locations() (paths, error) {
 	return paths{dir, filepath.Join(dir, "control.sock"), filepath.Join(logs, "server-"+id+".log")}, nil
 }
 
+// The default config may not exist yet. Resolve its nearest existing ancestor
+// as well as existing config files, so aliases consistently identify one daemon.
+func canonicalConfigPath(p string) (string, error) {
+	p = filepath.Clean(p)
+	suffix := ""
+	for {
+		real, err := filepath.EvalSymlinks(p)
+		if err == nil {
+			return filepath.Join(real, suffix), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		// Do not reinterpret an existing dangling symlink as an absent config.
+		if _, statErr := os.Lstat(p); !errors.Is(statErr, os.ErrNotExist) {
+			return "", err
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			return "", err
+		}
+		suffix = filepath.Join(filepath.Base(p), suffix)
+		p = parent
+	}
+}
+
 type request struct{ Action, Project string }
 type response struct {
 	Info
@@ -71,8 +101,11 @@ type response struct {
 }
 
 func call(ctx context.Context, p paths, action, project string) (Info, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
+	if action != "open" {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+	}
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", p.socket)
 	}}
@@ -253,7 +286,7 @@ func Run(ctx context.Context, root, version, commit string, serve func(context.C
 			return err
 		}
 		info := Info{true, os.Getpid(), web.Origin, root, version, commit}
-		control = &http.Server{ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		control = &http.Server{ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var in request
 			if r.Method != http.MethodPost || r.URL.Path != "/control" || json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&in) != nil {
 				w.WriteHeader(http.StatusBadRequest)

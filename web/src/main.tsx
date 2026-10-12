@@ -25,6 +25,13 @@ type Document = {
 	html: string;
 };
 type Page = { paths: string[]; next?: string };
+type DocumentList = {
+	project: string;
+	kind: Kind;
+	next: string;
+	loading: Promise<void> | null;
+	all: boolean;
+};
 type Heading = { id: string; text: string; level: number };
 type Toast = { id: number; text: string };
 
@@ -86,6 +93,7 @@ function App() {
 	const [activeHeading, setActiveHeading] = useState("");
 	const ticket = useRef(0);
 	const previewTicket = useRef(0);
+	const documentList = useRef<DocumentList | null>(null);
 	const toastId = useRef(0);
 	const dialog = useRef<HTMLDialogElement>(null);
 	const reading = useRef<HTMLElement>(null);
@@ -138,17 +146,53 @@ function App() {
 	function canLeave() {
 		return !dirty || confirm("未保存の変更があります。破棄して移動しますか？");
 	}
-	async function list(p: string, k: Kind, after = "") {
+	async function list(p: string, k: Kind) {
+		const state: DocumentList = {
+			project: p,
+			kind: k,
+			next: "",
+			loading: null,
+			all: false,
+		};
+		documentList.current = state;
 		const page = await api<Page>(
-			`/api/documents?${query(p, k)}&limit=100&after=${encodeURIComponent(after)}`,
+			`/api/documents?${query(p, k)}&limit=100&after=`,
 		);
-		setPaths((previous) => (after ? [...previous, ...page.paths] : page.paths));
-		setNext(page.next || "");
-		return page.next || "";
+		if (documentList.current !== state) return;
+		state.next = page.next || "";
+		setPaths(page.paths);
+		setNext(state.next);
+	}
+	async function listMore(all = false) {
+		const state = documentList.current;
+		if (!state?.next) return;
+		if (state.loading) {
+			state.all ||= all;
+			return state.loading;
+		}
+		// 同じ一覧の取得を直列化し、切替・更新前の応答は反映しない。
+		state.all = all;
+		state.loading = (async () => {
+			try {
+				do {
+					const page = await api<Page>(
+						`/api/documents?${query(state.project, state.kind)}&limit=100&after=${encodeURIComponent(state.next)}`,
+					);
+					if (documentList.current !== state) return;
+					state.next = page.next || "";
+					setPaths((previous) => [...previous, ...page.paths]);
+					setNext(state.next);
+				} while (state.all && state.next);
+			} catch (e) {
+				if (documentList.current === state) throw e;
+			} finally {
+				state.loading = null;
+			}
+		})();
+		return state.loading;
 	}
 	async function listAll() {
-		let after = next;
-		while (after) after = await list(project, kind, after);
+		await listMore(true);
 	}
 	async function load(p: string, k: Kind, path: string) {
 		const id = ++ticket.current;
@@ -164,6 +208,7 @@ function App() {
 	}
 	function resetDocument() {
 		++ticket.current;
+		documentList.current = null;
 		setDoc(null);
 		setDraft("");
 		setHTML("");
@@ -306,13 +351,13 @@ function App() {
 
 	// 編集中のプレビューは、入力が止まってから自動で更新する。
 	useEffect(() => {
+		const id = ++previewTicket.current;
 		if (!editing || !doc) return;
 		if (draft === doc.content) {
 			setHTML(doc.html);
 			setPreviewError(false);
 			return;
 		}
-		const id = ++previewTicket.current;
 		const timer = setTimeout(async () => {
 			try {
 				const result = await api<{ html: string }>(
@@ -327,7 +372,10 @@ function App() {
 				if (id === previewTicket.current) setPreviewError(true);
 			}
 		}, 350);
-		return () => clearTimeout(timer);
+		return () => {
+			clearTimeout(timer);
+			++previewTicket.current;
+		};
 	}, [draft, editing, doc]);
 
 	function create(event: Event) {
@@ -396,6 +444,11 @@ function App() {
 				e.preventDefault();
 				toggleChat();
 			} else if (e.key === "Escape") {
+				if (palette || modal) return;
+				if (editing && !drawer && !projectMenu) {
+					e.preventDefault();
+					closeEditor();
+				}
 				setDrawer(false);
 				setProjectMenu(false);
 			}
@@ -672,7 +725,7 @@ function App() {
 								disabled={busy}
 								onClick={() =>
 									void work(async () => {
-										await list(project, kind, next);
+										await listMore();
 									})
 								}
 							>

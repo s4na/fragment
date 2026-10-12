@@ -32,16 +32,15 @@ jobs:
         with:
           node-version: '24'
       - name: Install build tools
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           npm install --global pnpm@12.4.1
           # Pin the actual firewall instead of querying GitHub's latest-release
           # API anonymously from a shared runner with no installer cache.
           mkdir -p bin/tools
-          gh release download v1.15.4 --repo SocketDev/sfw-free \
-            --pattern sfw-free-linux-x86_64 --dir bin/tools
-          mv bin/tools/sfw-free-linux-x86_64 bin/tools/sfw
+          curl --fail --location --retry 3 --retry-all-errors \
+            --connect-timeout 15 --max-time 300 \
+            https://github.com/SocketDev/sfw-free/releases/download/v1.15.4/sfw-free-linux-x86_64 \
+            --output bin/tools/sfw
           echo 'cf9f55b8343e1ef6e6dcccdb09b99c70c0430a22ed7d0079286eccddeaf72670  bin/tools/sfw' | sha256sum --check
           chmod +x bin/tools/sfw
           echo "$GITHUB_WORKSPACE/bin/tools" >> "$GITHUB_PATH"

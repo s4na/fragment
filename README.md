@@ -36,7 +36,7 @@ Web UIをビルドしてGoの実行ファイルに埋め込み、4環境分のta
 
 追加のリポジトリや個人トークンは不要です。このリポジトリの `GITHUB_TOKEN` に `contents: write` を付け、タグ・Release・Formulaを更新します。mainへのbotの直接pushを禁止するブランチ保護を設定した場合は、そのpushを許可する構成が必要です。権限やビルドのエラーがあればジョブは失敗し、古いFormulaを新しい版として公開しません。
 
-ActionsではSocket Firewall FreeのLinux用実行ファイルを `v1.15.4` に固定し、標準の `GITHUB_TOKEN` で認証して取得し、SHA256を検証してから使用します。npmのsfwインストーラーが初回起動時に行う匿名の最新版取得に依存せず、キャッシュのないGitHub runnerでも同じ版を使います。pnpmは引き続き `sfw` 経由で実行します。
+ActionsではSocket Firewall FreeのLinux用実行ファイルを `v1.15.4` に固定し、認証不要の公開URLから再試行付きで取得し、SHA256を検証してから使用します。npmのsfwインストーラーが初回起動時に行う最新版API取得に依存せず、キャッシュのないGitHub runnerでも同じ版を使います。pnpmは引き続き `sfw` 経由で実行します。
 
 リリース用のローカルビルドは、変更をコミットし、Web UIをビルドしたあと次のコマンドで確認できます。公開処理は行わず、生成物は現在のworktreeのgitignore対象 `bin/release/v0.0.1/` に置きます。
 

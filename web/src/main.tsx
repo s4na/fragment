@@ -277,18 +277,7 @@ function App() {
 	useEffect(() => {
 		const id = ticket.current;
 		void work(async () => {
-			const token = new URLSearchParams(location.hash.slice(1)).get("token");
-			if (token)
-				history.replaceState(null, "", location.pathname + location.search);
-			let session: { csrf: string };
-			try {
-				session = await api<{ csrf: string }>("/api/session");
-			} catch (e) {
-				if (!token) throw e;
-				session = await api<{ csrf: string }>("/api/session", "POST", {
-					token,
-				});
-			}
+			const session = await api<{ csrf: string }>("/api/session");
 			setCSRF(session.csrf);
 			setRoot((await api<{ data_root: string }>("/api/state")).data_root);
 			const values = (await api<{ projects: string[] }>("/api/projects"))
@@ -1049,7 +1038,7 @@ function Welcome(props: {
 				<p>
 					{busy
 						? "少しお待ちください。"
-						: "サーバー起動時に表示されたURLから開いてください。"}
+						: "サーバーの起動を確認し、ページを再読み込みしてください。"}
 				</p>
 			</div>
 		);

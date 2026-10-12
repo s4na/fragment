@@ -21,7 +21,7 @@ func Service() (*app.Service, *storage.Store, error) {
 }
 func Run(ctx context.Context, args []string, in io.Reader, out, errout io.Writer) error {
 	if len(args) < 2 {
-		return app.Fail("invalid_input", "使い方: fragment config init|show / project list|create / doc list|get|create|update / serve / mcp")
+		return app.Fail("invalid_input", "使い方: fragment config init|show / project list|create / doc list|get|create|update / open / status / stop / serve / mcp")
 	}
 	var result any
 	if args[0] == "config" {

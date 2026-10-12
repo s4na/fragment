@@ -14,7 +14,7 @@ ghqのリポジトリやブランチを切り替えても同じ保存先を参�
 brew tap s4na/fragment https://github.com/s4na/fragment
 brew install s4na/fragment/fragment
 fragment version
-fragment serve
+fragment
 ```
 
 このリポジトリをtapとして使うため、最初の `brew tap` にはURLが必要です。[Homebrewの独自tap](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap) の仕組みを使っています。更新は次のコマンドで行います。
@@ -48,13 +48,38 @@ go run ./scripts/release build --version v0.0.1 --commit "$(git rev-parse HEAD)"
 
 `fragment version` は配布版では `version` とビルド元の `commit` を、ソースコード版では `version: "dev"` と実装内容の指紋を返します。Homebrewの実行ファイルはCellarで管理され、開発用worktreeのビルド結果とは独立しています。
 
+## ターミナルからプロジェクトを開く
+
+Homebrewでインストールしたあとは、どのディレクトリでも次のように使えます。
+
+```sh
+fragment                       # プロジェクト一覧をブラウザで開く
+fragment open "新サービス"      # 共通保存先の指定プロジェクトを開く
+fragment status                # バックグラウンドサーバーの状態
+fragment stop                  # バックグラウンドサーバーを停止
+fragment open --no-open         # ブラウザを起動せず接続URLをJSONで取得
+```
+
+最初の起動でサーバーをバックグラウンドに立ち上げ、ブラウザを開いたらコマンドは終了します。同じ設定を使う次の起動ではサーバーを再利用します。macOSは `open`、Linuxは `xdg-open` で既定のブラウザを開きます。ブラウザを起動できない場合もURLを表示し、手動で開けるようにします。
+
+参照先は既存の `config` 設定を使い、未設定なら `~/Documents/fragment` です。カレントディレクトリやリポジトリ、ブランチから保存先を決めることはありません。開く対象はその保存先に存在するプロジェクト名だけです。存在しない名前や任意のファイルパスはエラーにし、プロジェクトを勝手に作りません。
+
+起動管理は同じOSユーザー・設定ファイルごとに共有します。Web UIはloopbackの空いているポートを使い、起動管理用のUnixソケットとロックは `/tmp/fragment-<UID>/<設定の識別子>/` の本人だけが使えるフォルダに置きます。管理ソケットはTCPへ公開しません。起動ログはOSのユーザーキャッシュ配下の `fragment/server-<設定の識別子>.log` に置きます。文書の保存先や排他制御は従来の共通コアのままです。
+
+開くたびに10分有効・一回限りの接続URLを発行します。未使用の接続URLは最大32件を保持します。再度開いても既存のブラウザのセッションや進行中のチャットを無効にしません。サーバーが異常終了した場合は、次の起動時に立ち上げ直します。保存先設定を変更した場合、既存サーバーと新しい設定の違いを表示して停止を案内し、古い保存先をそのまま開きません。
+
+アップグレード後は `fragment stop` のあと `fragment` を実行すると、新しい実行ファイルで立ち上がります。`status` には実行中のサーバーのバージョンとビルド元コミットも表示します。`stop` はバックグラウンド起動したサーバーを終了し、チャット処理もキャンセルします。文書や保存先設定は削除しません。
+
+ソースコードからは同じコマンドを `./fragment` で実行できます。ビルド結果は引き続きそのworktreeのgitignore対象に保存します。作業用worktreeを消す前には、その実行ファイルで起動したサーバーを `./fragment stop` で止めてください。従来の `fragment serve` は前面でサーバーを動かす入口として残り、表示されたURLから手動で接続できます。バックグラウンドサーバーとは別に動きます。
+
 ## CLIを実行する
 
 ソースコードから使う場合は、リポジトリ直下の `fragment` スクリプトを実行します。事前の `make` は不要です。
 
 ```sh
 ./fragment project list
-./fragment serve
+./fragment
+./fragment open "新サービス"
 ./fragment version
 ```
 
@@ -94,7 +119,7 @@ printf '# 概要\n\n自由なMarkdown本文。\n' | ./fragment doc create \
 ./fragment serve
 ```
 
-`serve` が表示するURLをブラウザで開くと接続できます。最初の接続で起動時の一回限りのトークンを使い、その後はローカルのセッションCookieで認証します。別のブラウザから接続する場合はサーバーを再起動して新しいURLを使ってください。
+`serve` が表示するURLをブラウザで開くと接続できます。最初の接続で起動時の一回限りのトークンを使い、その後はローカルのセッションCookieで認証します。バックグラウンド版は `fragment` を再度実行して新しい接続URLを取得できます。前面の `serve` で別のブラウザから接続する場合は再起動して新しいURLを使ってください。
 
 設定なしでは `~/Documents/fragment` を共通保存先に使い、最初の文書操作・MCP・Webサーバーの起動時に必要なフォルダとロックファイルを自動作成します。`config show` で保存先を確認できます。変更したい場合だけ `./fragment config init /absolute/path/to/documents` を実行してください。
 

@@ -246,3 +246,48 @@ func TestAuthenticatedChatPersistsSharedData(t *testing.T) {
 		t.Fatal(flow, e)
 	}
 }
+
+func TestDesktopOpeningTokens(t *testing.T) {
+	st, err := storage.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(&app.Service{Repo: st}, st.Root, "http://127.0.0.1:8787", "127.0.0.1:8787", nil)
+	first := s.SessionURL("設計 + #?")
+	second := s.SessionURL("")
+	parsed, err := url.Parse(first)
+	if err != nil || parsed.Query().Get("project") != "設計 + #?" {
+		t.Fatalf("project URL: %s %v", first, err)
+	}
+	token := func(link string) string {
+		u, _ := url.Parse(link)
+		q, _ := url.ParseQuery(u.Fragment)
+		return q.Get("token")
+	}
+	one, two := token(first), token(second)
+	if one == two || one == "" || two == "" {
+		t.Fatal("opening tokens must be independent")
+	}
+	login := func(value string) int {
+		b, _ := json.Marshal(map[string]string{"token": value})
+		r := httptest.NewRequest("POST", s.Origin+"/api/session", bytes.NewReader(b))
+		r.Header.Set("Origin", s.Origin)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		return w.Code
+	}
+	if login(one) != 200 || login(two) != 200 || login(one) != 401 {
+		t.Fatal("each opening must work once without invalidating another")
+	}
+	expired := token(s.SessionURL(""))
+	s.opening[expired] = time.Now().Add(-time.Second)
+	if login(expired) != 401 {
+		t.Fatal("expired opening token accepted")
+	}
+	for i := 0; i < 50; i++ {
+		s.SessionURL("")
+	}
+	if len(s.opening) > 32 {
+		t.Fatal("unconsumed opening URLs grow without a bound")
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ type Server struct {
 	cookieName               string
 	mu                       sync.Mutex
 	consumed                 bool
+	opening                  map[string]time.Time
 	Assets                   fs.FS
 	Chat                     *chat.Manager
 }
@@ -41,6 +43,38 @@ func New(s *app.Service, root, origin, host string, assets fs.FS) *Server {
 	return &Server{Service: s, Root: root, Origin: origin, Host: host, bootstrap: secret(), session: secret(), csrf: secret(), cookieName: "fragment_session_" + app.Revision([]byte(origin))[:16], Assets: assets}
 }
 func (s *Server) BootstrapURL() string { return s.Origin + "/#token=" + s.bootstrap }
+
+// SessionURL is called only by the private desktop control socket. Each URL
+// has its own single-use token, so reopening does not invalidate other tabs.
+func (s *Server) SessionURL(project string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.opening == nil {
+		s.opening = make(map[string]time.Time)
+	}
+	now := time.Now()
+	for token, expiry := range s.opening {
+		if !expiry.After(now) {
+			delete(s.opening, token)
+		}
+	}
+	if len(s.opening) >= 32 {
+		var oldest string
+		for token, expiry := range s.opening {
+			if oldest == "" || expiry.Before(s.opening[oldest]) {
+				oldest = token
+			}
+		}
+		delete(s.opening, oldest)
+	}
+	token := secret()
+	s.opening[token] = now.Add(10 * time.Minute)
+	query := ""
+	if project != "" {
+		query = "?" + url.Values{"project": {project}}.Encode()
+	}
+	return s.Origin + "/" + query + "#token=" + token
+}
 func equal(a, b string) bool {
 	return len(a) == len(b) && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
@@ -77,6 +111,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		valid := !s.consumed && equal(in.Token, s.bootstrap)
 		if valid {
 			s.consumed = true
+		}
+		if expiry, ok := s.opening[in.Token]; ok {
+			delete(s.opening, in.Token)
+			valid = expiry.After(time.Now())
 		}
 		s.mu.Unlock()
 		if !valid {

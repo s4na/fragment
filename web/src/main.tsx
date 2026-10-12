@@ -149,6 +149,7 @@ function App() {
 		return !dirty || confirm("未保存の変更があります。破棄して移動しますか？");
 	}
 	async function list(p: string, k: Kind) {
+		const previous = documentList.current;
 		const state: DocumentList = {
 			project: p,
 			kind: k,
@@ -157,9 +158,14 @@ function App() {
 			all: false,
 		};
 		documentList.current = state;
-		const page = await api<Page>(
-			`/api/documents?${query(p, k)}&limit=100&after=`,
-		);
+		let page: Page;
+		try {
+			page = await api<Page>(`/api/documents?${query(p, k)}&limit=100&after=`);
+		} catch (e) {
+			if (documentList.current !== state) return;
+			documentList.current = previous;
+			throw e;
+		}
 		if (documentList.current !== state) return;
 		state.next = page.next || "";
 		setPaths(page.paths);
@@ -283,11 +289,13 @@ function App() {
 
 	function refresh() {
 		if (pendingWork.current > 0 || !canLeave()) return;
+		const id = ticket.current;
 		void work(async () => {
-			setProjects(
-				(await api<{ projects: string[] }>("/api/projects")).projects,
-			);
+			const values = await api<{ projects: string[] }>("/api/projects");
+			if (id !== ticket.current) return;
+			setProjects(values.projects);
 			if (project) await list(project, kind);
+			if (id !== ticket.current) return;
 			if (doc) await load(project, kind, doc.path);
 			toast("最新の状態に更新しました");
 		});

@@ -246,9 +246,11 @@ function App() {
 		if (k !== kind) {
 			// 別の保存場所の文書へは、一覧を切り替えてから開く。
 			resetDocument();
+			const id = ticket.current;
 			setKind(k);
 			void work(async () => {
 				await list(project, k);
+				if (id !== ticket.current) return;
 				await load(project, k, path);
 			});
 			return;
@@ -257,6 +259,7 @@ function App() {
 	}
 
 	useEffect(() => {
+		const id = ticket.current;
 		void work(async () => {
 			const token = new URLSearchParams(location.hash.slice(1)).get("token");
 			if (token)
@@ -281,6 +284,7 @@ function App() {
 			setProject(selected);
 			if (selected) {
 				await list(selected, kind);
+				if (id !== ticket.current) return;
 				const path = initial.get("path");
 				if (path && selected === project) await load(selected, kind, path);
 			}
@@ -361,8 +365,10 @@ function App() {
 	useEffect(() => {
 		if (!chatRefresh || busy) return;
 		setChatRefresh(false);
+		const id = ticket.current;
 		void work(async () => {
 			await list(project, kind);
+			if (id !== ticket.current) return;
 			if (doc && !editing) await load(project, kind, doc.path);
 		});
 	}, [chatRefresh, busy, project, kind]);

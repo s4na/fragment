@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+
+# Keep the caller's working directory, arguments, stdin and process identity.
+root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+mkdir -p "$root/bin"
+source="$root/scripts/launcher.go"
+launcher="$root/bin/launcher"
+version=$(go version)
+if [ ! -x "$launcher" ] || ! cmp -s "$source" "$root/bin/launcher-source" ||
+   [ "$version" != "$(cat "$root/bin/launcher-version" 2>/dev/null || true)" ]; then
+    temporary=$(mktemp -d "$root/bin/.launcher.XXXXXX")
+    trap 'rm -rf "$temporary"' 0
+    trap 'exit 1' HUP INT TERM
+    cp "$source" "$temporary/launcher.go"
+    GOFLAGS= GOWORK=off CGO_ENABLED=0 GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) \
+        go build -o "$temporary/launcher" "$temporary/launcher.go"
+    if ! cmp -s "$source" "$temporary/launcher.go"; then
+        printf 'fragment: 起動処理が変更されました。もう一度実行してください。\n' >&2
+        exit 1
+    fi
+    printf '%s\n' "$version" > "$temporary/version"
+    mv "$temporary/launcher" "$launcher"
+    mv "$temporary/launcher.go" "$root/bin/launcher-source"
+    mv "$temporary/version" "$root/bin/launcher-version"
+    rm -rf "$temporary"
+    trap - 0 HUP INT TERM
+fi
+binary=$("$launcher" "$root")
+exec "$binary" "$@"

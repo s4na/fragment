@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/s4na/fragment/internal/app"
@@ -103,5 +105,47 @@ func TestSessionWriteAndRead(t *testing.T) {
 	s.ServeHTTP(w, r)
 	if w.Code != 403 {
 		t.Fatal("Host accepted")
+	}
+}
+
+func TestSessionsAcrossPorts(t *testing.T) {
+	st, err := storage.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assets, err := fs.Sub(web.Assets, "dist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	one := New(&app.Service{Repo: st}, st.Root, "http://127.0.0.1:8787", "127.0.0.1:8787", assets)
+	two := New(&app.Service{Repo: st}, st.Root, "http://127.0.0.1:8788", "127.0.0.1:8788", assets)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, server := range []*Server{one, two} {
+		u, _ := url.Parse(server.Origin)
+		body, _ := json.Marshal(map[string]string{"token": server.bootstrap})
+		r := httptest.NewRequest("POST", server.Origin+"/api/session", bytes.NewReader(body))
+		r.Header.Set("Origin", server.Origin)
+		w := httptest.NewRecorder()
+		server.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		jar.SetCookies(u, w.Result().Cookies())
+	}
+	// A browser sends both cookies to either port; each server must find its own.
+	for _, server := range []*Server{one, two} {
+		u, _ := url.Parse(server.Origin)
+		r := httptest.NewRequest("GET", server.Origin+"/api/state", nil)
+		for _, cookie := range jar.Cookies(u) {
+			r.AddCookie(cookie)
+		}
+		w := httptest.NewRecorder()
+		server.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatal("another port invalidated the session", w.Code, w.Body.String())
+		}
 	}
 }

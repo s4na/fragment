@@ -22,6 +22,7 @@ type Server struct {
 	Service                  *app.Service
 	Root, Origin, Host       string
 	bootstrap, session, csrf string
+	cookieName               string
 	mu                       sync.Mutex
 	consumed                 bool
 	Assets                   fs.FS
@@ -35,7 +36,7 @@ func secret() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 func New(s *app.Service, root, origin, host string, assets fs.FS) *Server {
-	return &Server{Service: s, Root: root, Origin: origin, Host: host, bootstrap: secret(), session: secret(), csrf: secret(), Assets: assets}
+	return &Server{Service: s, Root: root, Origin: origin, Host: host, bootstrap: secret(), session: secret(), csrf: secret(), cookieName: "fragment_session_" + app.Revision([]byte(origin))[:16], Assets: assets}
 }
 func (s *Server) BootstrapURL() string { return s.Origin + "/#token=" + s.bootstrap }
 func equal(a, b string) bool {
@@ -80,7 +81,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeError(w, app.Fail("unauthorized", "起動時のURLから接続してください"))
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: "fragment_session", Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+		http.SetCookie(w, &http.Cookie{Name: s.cookieName, Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 		writeJSON(w, 200, map[string]string{"csrf": s.csrf})
 		return
 	}
@@ -92,7 +93,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.FileServer(http.FS(s.Assets)).ServeHTTP(w, r)
 		return
 	}
-	cookie, err := r.Cookie("fragment_session")
+	cookie, err := r.Cookie(s.cookieName)
 	if err != nil || !equal(cookie.Value, s.session) {
 		writeError(w, app.Fail("unauthorized", "起動時のURLから接続してください"))
 		return

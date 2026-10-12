@@ -60,6 +60,7 @@ function App() {
 	const [projects, setProjects] = useState<string[]>([]);
 	const [paths, setPaths] = useState<string[]>([]);
 	const [next, setNext] = useState("");
+	const [listVersion, setListVersion] = useState(0);
 	const [doc, setDoc] = useState<Document | null>(null);
 	const [draft, setDraft] = useState("");
 	const [html, setHTML] = useState("");
@@ -164,12 +165,14 @@ function App() {
 		} catch (e) {
 			if (documentList.current !== state) return;
 			documentList.current = previous;
+			setListVersion((version) => version + 1);
 			throw e;
 		}
 		if (documentList.current !== state) return;
 		state.next = page.next || "";
 		setPaths(page.paths);
 		setNext(state.next);
+		setListVersion((version) => version + 1);
 	}
 	async function listMore(all = false) {
 		const state = documentList.current;
@@ -204,7 +207,7 @@ function App() {
 	}
 	useEffect(() => {
 		if (next && (filter.trim() || palette)) void work(listAll);
-	}, [next, filter, palette]);
+	}, [next, filter, palette, listVersion]);
 	async function load(p: string, k: Kind, path: string) {
 		const id = ++ticket.current;
 		const value = await api<Document>(`/api/document?${query(p, k, path)}`);

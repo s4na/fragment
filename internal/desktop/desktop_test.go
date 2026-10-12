@@ -82,8 +82,19 @@ func TestCanonicalConfigPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := canonicalConfigPath(fileLink)
-	if err != nil || got != file {
-		t.Fatalf("config file symlink: %q %v", got, err)
+	if err != nil || got != fileLink {
+		t.Fatalf("config file identity must use its directory: %q %v", got, err)
+	}
+	replacement := filepath.Join(base, "replacement")
+	if err := os.WriteFile(replacement, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(replacement, fileLink); err != nil {
+		t.Fatal(err)
+	}
+	after, err := canonicalConfigPath(fileLink)
+	if err != nil || after != got {
+		t.Fatalf("config rewrite changed daemon identity: %q %v", after, err)
 	}
 }
 

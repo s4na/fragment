@@ -68,11 +68,14 @@ func locations() (paths, error) {
 	return paths{dir, filepath.Join(dir, "control.sock"), filepath.Join(logs, "server-"+id+".log")}, nil
 }
 
-// The default config may not exist yet. Resolve its nearest existing ancestor
-// as well as existing config files, so aliases consistently identify one daemon.
+// Identify the config by its canonical directory and fixed filename. Init
+// atomically replaces the file, including a file symlink, so following that
+// symlink would change the daemon identity when the config is rewritten.
+// The default directory may not exist yet; resolve its existing ancestor.
 func canonicalConfigPath(p string) (string, error) {
 	p = filepath.Clean(p)
-	suffix := ""
+	suffix := filepath.Base(p)
+	p = filepath.Dir(p)
 	for {
 		real, err := filepath.EvalSymlinks(p)
 		if err == nil {
@@ -81,7 +84,7 @@ func canonicalConfigPath(p string) (string, error) {
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", err
 		}
-		// Do not reinterpret an existing dangling symlink as an absent config.
+		// Do not reinterpret an existing dangling directory link as absent.
 		if _, statErr := os.Lstat(p); !errors.Is(statErr, os.ErrNotExist) {
 			return "", err
 		}

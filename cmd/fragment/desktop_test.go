@@ -54,6 +54,16 @@ func TestDesktopSharedStoreLifecycle(t *testing.T) {
 	root := filepath.Join(temp, "documents")
 	project := "設計 + #?"
 	must(temp, "config", "init", root)
+	// Init replaces this file symlink later. The same daemon must remain
+	// reachable so it can report the changed root and stop through an alias.
+	configFile := filepath.Join(temp, "config", "config.json")
+	configTarget := filepath.Join(temp, "config", "original.json")
+	if err := os.Rename(configFile, configTarget); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(configTarget, configFile); err != nil {
+		t.Fatal(err)
+	}
 	root, err = filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatal(err)

@@ -20,7 +20,6 @@ make test
 ## 使い始める
 
 ```sh
-bin/fragment config init "$HOME/Documents/fragment"
 bin/fragment project create "新サービス"
 printf '# 概要\n\n自由なMarkdown本文。\n' | bin/fragment doc create \
   --project "新サービス" --kind stock --path "概要.md"
@@ -28,6 +27,8 @@ bin/fragment serve
 ```
 
 `serve` が表示するURLをブラウザで開くと接続できます。最初の接続で起動時の一回限りのトークンを使い、その後はローカルのセッションCookieで認証します。別のブラウザから接続する場合はサーバーを再起動して新しいURLを使ってください。
+
+設定なしでは `~/Documents/fragment` を共通保存先に使い、最初の文書操作・MCP・Webサーバーの起動時に必要なフォルダとロックファイルを自動作成します。`config show` で保存先を確認できます。変更したい場合だけ `bin/fragment config init /absolute/path/to/documents` を実行してください。
 
 保存先の名前は自由です。設定を同じOSユーザーで共有するため、リポジトリやブランチを切り替えても同じデータを読み書きします。設定を変更したら常駐しているMCPとWebサーバーを再起動してください。`config init` は保存先の設定を変更しますが、既存の文書を移動しません。
 
@@ -82,6 +83,6 @@ CLIや外部MCPで競合した場合も最新の本文を取得し、変更内�
 - flowとstock内の相対Markdownリンクを解決します。画像配信やMermaid表示、改名、移動、削除、同期、編集履歴は未対応です。
 - 安全な同時書き込みの範囲はアプリケーションの入口間です。外部エディターや同期ソフトはOSロックに従わない場合があります。
 
-通常の設定は `os.UserConfigDir()` 配下の `fragment/config.json` にあります。検証用には絶対パスの `FRAGMENT_CONFIG_DIR` で設定ディレクトリを切り替えられます。CLI・MCP・Webサーバーには同じ値を渡してください。利用者の文書とアプリケーションのソースコードは別の場所に保管します。
+通常の設定は `os.UserConfigDir()` 配下の `fragment/config.json` にあります。検証用には絶対パスの `FRAGMENT_CONFIG_DIR` で設定ディレクトリを切り替えられます。CLI・MCP・Webサーバーには同じ値を渡してください。この変数を明示した場合は指定先の設定ファイルが必要で、未設定のまま通常の保存先へ切り替わることはありません。利用者の文書とアプリケーションのソースコードは別の場所に保管します。
 
 - [共通ドキュメントストアのデザインドック](docs/design-doc.md)

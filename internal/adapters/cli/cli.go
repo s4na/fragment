@@ -13,11 +13,7 @@ import (
 )
 
 func Service() (*app.Service, *storage.Store, error) {
-	c, err := config.Load()
-	if err != nil {
-		return nil, nil, err
-	}
-	s, err := storage.Open(c.DataRoot)
+	s, err := config.OpenStore()
 	if err != nil {
 		return nil, nil, err
 	}

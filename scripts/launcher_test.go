@@ -37,7 +37,7 @@ func TestSourceHashUsesImplementationContent(t *testing.T) {
 		}
 	}
 	// The filesystem is authoritative, regardless of whether changes are staged.
-	for _, path := range []string{"internal/app/app.go", "internal/app/new.go", "web/src/style.css", "web/.env.local", "web/package.json", "go.sum"} {
+	for _, path := range []string{"internal/app/app.go", "internal/app/new.go", "web/src/style.css", "web/.env.local", "web/package.json", "go.sum", "web/public/__tests__/data.json"} {
 		before := hash()
 		write(path, "implementation change")
 		if hash() == before {

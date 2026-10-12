@@ -78,11 +78,12 @@ func run(root, name string, args ...string) error {
 }
 
 func relevant(path string) bool {
-	if strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/__tests__/") {
-		return false
-	}
+	// Vite copies all public files, including names which resemble test fixtures.
 	if strings.HasPrefix(path, "web/public/") {
 		return true
+	}
+	if strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/__tests__/") {
+		return false
 	}
 	if strings.HasPrefix(path, "web/src/") {
 		name := filepath.Base(path)

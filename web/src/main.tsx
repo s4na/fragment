@@ -216,10 +216,12 @@ function App() {
 		setEditing(false);
 		setLatest(null);
 		history.replaceState(null, "", `/?${query(p, k, path)}`);
+		return true;
 	}
 	function resetDocument() {
 		++ticket.current;
 		documentList.current = null;
+		setModal(null);
 		setDoc(null);
 		setDraft("");
 		setHTML("");
@@ -242,6 +244,7 @@ function App() {
 	}
 	function openDoc(path: string, k: Kind = kind) {
 		if (!canLeave()) return;
+		setModal(null);
 		setDrawer(false);
 		if (k !== kind) {
 			// 別の保存場所の文書へは、一覧を切り替えてから開く。
@@ -255,7 +258,9 @@ function App() {
 			});
 			return;
 		}
-		void work(() => load(project, k, path));
+		void work(async () => {
+			await load(project, k, path);
+		});
 	}
 
 	useEffect(() => {
@@ -404,13 +409,15 @@ function App() {
 
 	function create(event: Event) {
 		event.preventDefault();
+		const id = ticket.current;
 		void work(async () => {
 			if (modal === "project") {
 				const projectName = name.trim();
 				await api("/api/projects", "POST", { project: projectName });
-				setProjects(
-					(await api<{ projects: string[] }>("/api/projects")).projects,
-				);
+				if (id !== ticket.current) return;
+				const values = await api<{ projects: string[] }>("/api/projects");
+				if (id !== ticket.current) return;
+				setProjects(values.projects);
 				resetDocument();
 				setProject(projectName);
 				setKind("stock");
@@ -422,8 +429,10 @@ function App() {
 				await api(`/api/document?${query(project, kind, path)}`, "POST", {
 					content: `# ${displayName(path)}\n\n`,
 				});
+				if (id !== ticket.current) return;
 				await list(project, kind);
-				await load(project, kind, path);
+				if (id !== ticket.current) return;
+				if (!(await load(project, kind, path))) return;
 				setEditing(true);
 				toast("文書を作成しました");
 			}

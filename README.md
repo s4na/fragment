@@ -6,6 +6,24 @@ fragmentは、ローカルのドキュメントフォルダをCLI、MCP、Web UI
 
 ghqのリポジトリやブランチを切り替えても同じ保存先を参照し、Goの共通コアで操作します。PreactのWeb UIでは、保存されたMarkdownを整形して閲覧できます。
 
+## CLIを実行する
+
+ソースコードから使う場合は、リポジトリ直下の `fragment` スクリプトを実行します。事前の `make` は不要です。
+
+```sh
+./fragment project list
+./fragment serve
+./fragment version
+```
+
+初回はGoとWeb UIをビルドします。次回からは、現在のコミット、実装ファイルの内容、Goのビルド設定、実行ファイル自体が一致すれば、そのまま起動します。未コミット・未追跡の実装変更も確認するため、変更をコミットしていなくても反映されます。READMEやテストだけの未コミット編集では再ビルドしません。新しいコミットに切り替わった場合は、コミット番号をそろえるために再ビルドします。「最新」は手元のcheckoutの状態を指し、勝手にpullやcommitはしません。
+
+ビルドに失敗した場合はエラーで止まり、古い実行ファイルでは続行しません。同じworktreeで同時に起動しても、ビルドは順番に行います。ビルド中に実装が変わった場合は確認し直し、変更が続く場合はリトライを案内します。
+
+実行ファイル・起動補助・ビルド状態・ロック・一時出力は、すべてそのcheckoutのgitignore対象の `bin/` に置きます。Webの生成物は同じcheckoutの `web/dist/`、依存は `web/node_modules/` にあり、worktreeの削除と一緒に消えます。利用者の文書は従来どおりDocuments配下に残ります。`./fragment version` は実際にビルドしたコミットと実装内容の指紋をJSONで返します。
+
+起動スクリプトにはGoとGitが必要で、アプリを再ビルドする場合は下記のNode.js・pnpm・sfwも必要です。他のディレクトリから絶対パスで実行しても、そのスクリプトのcheckoutを使います。引数・標準入力・終了コードをそのまま渡し、`--file` の相対パスは呼び出したディレクトリを基準にします。ビルドのログは標準エラーへ出すため、CLIのJSONやMCPの通信に混ざりません。
+
 ## ビルドと検証
 
 macOSのローカルディスクを対象に検証しています。開発にはGo 1.26.3以降、Node.js 22.12以降、pnpm、Socket Firewallの `sfw` が必要です。ビルド済みの実行ファイルは、Node.jsやpnpmなしで利用できます。
@@ -28,15 +46,15 @@ Go側だけなら `make lint-go`、Web UI側だけなら `make lint-web` で実�
 ## 使い始める
 
 ```sh
-bin/fragment project create "新サービス"
-printf '# 概要\n\n自由なMarkdown本文。\n' | bin/fragment doc create \
+./fragment project create "新サービス"
+printf '# 概要\n\n自由なMarkdown本文。\n' | ./fragment doc create \
   --project "新サービス" --kind stock --path "概要.md"
-bin/fragment serve
+./fragment serve
 ```
 
 `serve` が表示するURLをブラウザで開くと接続できます。最初の接続で起動時の一回限りのトークンを使い、その後はローカルのセッションCookieで認証します。別のブラウザから接続する場合はサーバーを再起動して新しいURLを使ってください。
 
-設定なしでは `~/Documents/fragment` を共通保存先に使い、最初の文書操作・MCP・Webサーバーの起動時に必要なフォルダとロックファイルを自動作成します。`config show` で保存先を確認できます。変更したい場合だけ `bin/fragment config init /absolute/path/to/documents` を実行してください。
+設定なしでは `~/Documents/fragment` を共通保存先に使い、最初の文書操作・MCP・Webサーバーの起動時に必要なフォルダとロックファイルを自動作成します。`config show` で保存先を確認できます。変更したい場合だけ `./fragment config init /absolute/path/to/documents` を実行してください。
 
 保存先の名前は自由です。設定を同じOSユーザーで共有するため、リポジトリやブランチを切り替えても同じデータを読み書きします。設定を変更したら常駐しているMCPとWebサーバーを再起動してください。`config init` は保存先の設定を変更しますが、既存の文書を移動しません。
 
@@ -45,21 +63,21 @@ bin/fragment serve
 CLIはJSONを標準出力へ返します。本文は標準入力、または `--file` で指定したファイルから入力できます。
 
 ```sh
-bin/fragment project list
-bin/fragment doc list --project "新サービス" --kind flow
-bin/fragment doc get --project "新サービス" --kind stock --path "概要.md"
-bin/fragment doc update --project "新サービス" --kind stock --path "概要.md" \
+./fragment project list
+./fragment doc list --project "新サービス" --kind flow
+./fragment doc get --project "新サービス" --kind stock --path "概要.md"
+./fragment doc update --project "新サービス" --kind stock --path "概要.md" \
   --revision "取得結果のrevision" --file ./updated.md
-bin/fragment mcp
+./fragment mcp
 ```
 
-AIクライアントには、ビルド済みの実行ファイルの絶対パスと引数 `mcp` を登録してください。stdioで `list_projects`、`create_project`、`list_documents`、`get_document`、`create_document`、`update_document` を提供します。
+AIクライアントには、リポジトリ直下の `fragment` スクリプトの絶対パスと引数 `mcp` を登録してください。初回の接続前に `./fragment version` を実行しておくと、ビルド待ちによる接続のタイムアウトを避けられます。ビルド済みの実行ファイルを直接登録することもできます。stdioで `list_projects`、`create_project`、`list_documents`、`get_document`、`create_document`、`update_document` を提供します。
 
 ```json
 {
   "mcpServers": {
     "fragment": {
-      "command": "/absolute/path/to/fragment/bin/fragment",
+      "command": "/absolute/path/to/fragment/fragment",
       "args": ["mcp"]
     }
   }
@@ -68,7 +86,7 @@ AIクライアントには、ビルド済みの実行ファイルの絶対パス
 
 ## Web UIのCodexチャット
 
-macOSではデスクトップアプリ同梱のCodex CLIを優先し、その他の場合はPATHの `codex` を使います。ローカルのCodex CLIをインストールし、`codex login` を完了してから `bin/fragment serve` を起動してください。実行ファイルがPATHにない場合は `serve --codex /absolute/path/to/codex` で指定できます。文書の閲覧・手動編集・CLI・MCPはCodexなしでも利用できます。
+macOSではデスクトップアプリ同梱のCodex CLIを優先し、その他の場合はPATHの `codex` を使います。ローカルのCodex CLIをインストールし、`codex login` を完了してから `./fragment serve` を起動してください。実行ファイルがPATHにない場合は `serve --codex /absolute/path/to/codex` で指定できます。文書の閲覧・手動編集・CLI・MCPはCodexなしでも利用できます。
 
 プロジェクトのチャット欄から、たとえば「この内容をstock/概要.mdに保存して」「既存の説明を保って、この決定事項を追記して」と指示します。Goが `codex app-server --listen stdio://` を起動し、応答を画面に表示します。会話をflowの `chats/<時刻>-<乱数>.md` に保存し、文書操作はCLI・MCPと同じGoの共通コアで実行します。stockへの保存・更新は利用者の指示に従います。
 

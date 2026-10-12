@@ -79,6 +79,22 @@ func TestExplicitConfigurationDoesNotFallBack(t *testing.T) {
 	if e = os.Remove(path); e != nil {
 		t.Fatal(e)
 	}
+	target := filepath.Join(dir, "external-config.json")
+	if e = os.WriteFile(target, b, 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e = os.Symlink(target, path); e != nil {
+		t.Fatal(e)
+	}
+	if e = os.Remove(target); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = load(path, fallback, true); app.ErrorInfo(e).Code != "config_error" {
+		t.Fatal("broken config link switched stores", e)
+	}
+	if e = os.Remove(path); e != nil {
+		t.Fatal(e)
+	}
 	if _, e = load(path, fallback, false); app.ErrorInfo(e).Code != "config_error" {
 		t.Fatal("isolated config switched to normal data", e)
 	}

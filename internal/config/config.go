@@ -40,6 +40,11 @@ func Load() (Config, error) {
 func load(p string, homeDir func() (string, error), allowDefault bool) (Config, error) {
 	b, err := os.ReadFile(p)
 	if errors.Is(err, fs.ErrNotExist) && allowDefault {
+		// ReadFile also returns ENOENT for an existing dangling symlink. A broken
+		// explicit config must not silently route writes into the default store.
+		if _, statErr := os.Lstat(p); !errors.Is(statErr, fs.ErrNotExist) {
+			return Config{}, app.Fail("config_error", "保存先設定が存在しますが読み込めません")
+		}
 		home, err := homeDir()
 		if err != nil || !filepath.IsAbs(home) {
 			return Config{}, app.Fail("config_error", "ホームディレクトリを取得できません")

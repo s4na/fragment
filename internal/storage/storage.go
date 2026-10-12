@@ -280,7 +280,7 @@ func (s *Store) Write(ctx context.Context, k app.Key, content string, revision *
 			return app.Document{}, err
 		}
 		if doc.Revision != *revision {
-			return app.Document{}, app.Fail("conflict", "文書が更新されています。最新の本文を取得してください")
+			return app.Document{}, app.Fail("conflict", "文書が更新されています。最新データを再取得し、既存の内容を確認して変更案を作り直し、リトライしてください")
 		}
 	}
 	parent := filepath.Dir(target)

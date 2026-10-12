@@ -17,6 +17,7 @@ import (
 	httpadapter "github.com/s4na/fragment/internal/adapters/http"
 	mcpadapter "github.com/s4na/fragment/internal/adapters/mcp"
 	"github.com/s4na/fragment/internal/app"
+	"github.com/s4na/fragment/internal/chat"
 	"github.com/s4na/fragment/web"
 )
 
@@ -41,6 +42,8 @@ func run(ctx context.Context, args []string) error {
 			return mcpadapter.Run(ctx, s)
 		}
 		flags := flag.NewFlagSet("serve", flag.ContinueOnError)
+		model := flags.String("model", "", "Codexのモデル（省略時は設定またはapp-serverの標準）")
+		codex := flags.String("codex", chat.DefaultExecutable(), "Codex CLIの実行ファイル")
 		addr := flags.String("addr", "127.0.0.1:8787", "loopbackアドレス")
 		if err = flags.Parse(args[1:]); err != nil {
 			return err
@@ -64,6 +67,8 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 		handler := httpadapter.New(s, store.Root, origin, address, assets)
+		handler.Chat = chat.New(ctx, s, chat.Codex{Executable: *codex, Model: *model})
+		defer handler.Chat.Close()
 		server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 		fmt.Fprintln(os.Stderr, "fragment:", handler.BootstrapURL())
 		done := make(chan struct{})

@@ -1,6 +1,8 @@
 import { render } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import "./style.css";
+import { api, APIError, setCSRF } from "./api";
+import { Chat } from "./chat";
 
 type Kind = "flow" | "stock";
 type Document = {
@@ -12,28 +14,6 @@ type Document = {
   html: string;
 };
 type Page = { paths: string[]; next?: string };
-let csrf = "";
-
-async function api<T>(
-  route: string,
-  method = "GET",
-  body?: unknown,
-): Promise<T> {
-  const response = await fetch(route, {
-    method,
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", "X-Fragment-CSRF": csrf },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = await response.json();
-  if (!response.ok)
-    throw new Error(
-      data.error
-        ? `${data.error.message} (${data.error.code})`
-        : `リクエストに失敗しました (${response.status})`,
-    );
-  return data;
-}
 const query = (project: string, kind: Kind, path = "") =>
   new URLSearchParams({ project, kind, path }).toString();
 
@@ -49,9 +29,12 @@ function App() {
   const [doc, setDoc] = useState<Document | null>(null);
   const [draft, setDraft] = useState("");
   const [html, setHTML] = useState("");
+  const [conflictDraft, setConflictDraft] = useState("");
+  const [latest, setLatest] = useState<Document | null>(null);
   const [editing, setEditing] = useState(false);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [chatRefresh, setChatRefresh] = useState(false);
   const [error, setError] = useState("");
   const [root, setRoot] = useState("");
   const [modal, setModal] = useState<"project" | "document" | null>(null);
@@ -101,6 +84,7 @@ function App() {
     setDraft(value.content);
     setHTML(value.html);
     setEditing(false);
+    setLatest(null);
     history.replaceState(null, "", `/?${query(p, k, path)}`);
   }
   function navigate(p: string, k: Kind) {
@@ -112,6 +96,7 @@ function App() {
     setDraft("");
     setHTML("");
     setEditing(false);
+    setLatest(null);
     setPaths([]);
     setNext("");
     history.replaceState(null, "", `/?${query(p, k)}`);
@@ -132,7 +117,7 @@ function App() {
           token,
         });
       }
-      csrf = session.csrf;
+      setCSRF(session.csrf);
       setRoot((await api<{ data_root: string }>("/api/state")).data_root);
       const values = (await api<{ projects: string[] }>("/api/projects"))
         .projects;
@@ -162,14 +147,66 @@ function App() {
   function save() {
     if (!doc) return;
     void work(async () => {
-      await api(`/api/document?${query(project, kind, doc.path)}`, "PUT", {
-        content: draft,
-        revision: doc.revision,
-      });
-      // A failed update leaves draft and revision intact, including conflicts.
-      await load(project, kind, doc.path);
+      try {
+        await api(`/api/document?${query(project, kind, doc.path)}`, "PUT", {
+          content: draft,
+          revision: doc.revision,
+        });
+        await load(project, kind, doc.path);
+        setLatest(null);
+      } catch (e) {
+        if (e instanceof APIError && e.code === "conflict") {
+          setConflictDraft(draft);
+          setLatest(
+            await api<Document>(
+              `/api/document?${query(project, kind, doc.path)}`,
+            ),
+          );
+          throw new Error(
+            "データが競合しました。最新データを再取得しました。下の既存の本文を確認して変更案を編集し、リトライしてください。下書きは保持しています。",
+          );
+        }
+        throw e;
+      }
     });
   }
+  function retrySave() {
+    if (!doc || !latest) return;
+    void work(async () => {
+      try {
+        await api(`/api/document?${query(project, kind, doc.path)}`, "PUT", {
+          content: draft,
+          revision: latest.revision,
+        });
+        await load(project, kind, doc.path);
+        setLatest(null);
+      } catch (e) {
+        if (e instanceof APIError && e.code === "conflict") {
+          setConflictDraft(draft);
+          setLatest(
+            await api<Document>(
+              `/api/document?${query(project, kind, doc.path)}`,
+            ),
+          );
+          throw new Error(
+            "再び競合しました。最新の本文を再取得しました。内容を確認して編集し直してからリトライしてください。",
+          );
+        }
+        throw e;
+      }
+    });
+  }
+  function chatSaved() {
+    setChatRefresh(true);
+  }
+  useEffect(() => {
+    if (!chatRefresh || busy) return;
+    setChatRefresh(false);
+    void work(async () => {
+      await list(project, kind);
+      if (doc && !editing) await load(project, kind, doc.path);
+    });
+  }, [chatRefresh, busy, project, kind]);
   function create(event: Event) {
     event.preventDefault();
     void work(async () => {
@@ -182,6 +219,7 @@ function App() {
         setKind("stock");
         setDoc(null);
         setEditing(false);
+        setLatest(null);
         setPaths([]);
         setNext("");
         history.replaceState(null, "", `/?${query(name, "stock")}`);
@@ -223,7 +261,7 @@ function App() {
           </button>
         </div>
       )}
-      <div class="layout">
+      <div class={ready && project ? "layout with-chat" : "layout"}>
         <aside class="sidebar">
           <div class="section-label">
             PROJECTS
@@ -337,12 +375,17 @@ function App() {
                             setDraft(doc.content);
                             setHTML(doc.html);
                             setEditing(false);
+                            setLatest(null);
                           }
                         }}
                       >
                         編集を閉じる
                       </button>
-                      <button class="primary" disabled={busy} onClick={save}>
+                      <button
+                        class="primary"
+                        disabled={busy || latest !== null}
+                        onClick={save}
+                      >
                         保存
                       </button>
                     </>
@@ -354,45 +397,65 @@ function App() {
                 </div>
               </div>
               {editing ? (
-                <div class="editor">
-                  <section>
-                    <label for="markdown">Markdown</label>
-                    <textarea
-                      id="markdown"
-                      value={draft}
-                      spellcheck={false}
-                      disabled={busy}
-                      onInput={(e) => setDraft(e.currentTarget.value)}
-                    />
-                  </section>
-                  <section>
-                    <div class="preview-heading">
-                      <span>プレビュー</span>
+                <>
+                  {latest && (
+                    <section
+                      class="conflict-review"
+                      aria-label="競合した最新データ"
+                    >
+                      <h2>最新データを確認してリトライ</h2>
+                      <p>
+                        既存の内容を確認して下書きに反映してください。リトライには、この取得済みデータのリビジョンを使います。
+                      </p>
+                      <pre>{latest.content}</pre>
                       <button
-                        disabled={busy}
-                        onClick={() =>
-                          void work(async () => {
-                            setHTML(
-                              (
-                                await api<{ html: string }>(
-                                  `/api/preview?${query(project, kind, doc.path)}`,
-                                  "POST",
-                                  { content: draft },
-                                )
-                              ).html,
-                            );
-                          })
-                        }
+                        disabled={busy || draft === conflictDraft}
+                        onClick={retrySave}
                       >
-                        プレビュー更新
+                        既存の内容を確認して編集した下書きをリトライ
                       </button>
-                    </div>
-                    <article
-                      class="markdown"
-                      dangerouslySetInnerHTML={{ __html: html }}
-                    />
-                  </section>
-                </div>
+                    </section>
+                  )}
+                  <div class="editor">
+                    <section>
+                      <label for="markdown">Markdown</label>
+                      <textarea
+                        id="markdown"
+                        value={draft}
+                        spellcheck={false}
+                        disabled={busy}
+                        onInput={(e) => setDraft(e.currentTarget.value)}
+                      />
+                    </section>
+                    <section>
+                      <div class="preview-heading">
+                        <span>プレビュー</span>
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            void work(async () => {
+                              setHTML(
+                                (
+                                  await api<{ html: string }>(
+                                    `/api/preview?${query(project, kind, doc.path)}`,
+                                    "POST",
+                                    { content: draft },
+                                  )
+                                ).html,
+                              );
+                            })
+                          }
+                        >
+                          プレビュー更新
+                        </button>
+                      </div>
+                      <article
+                        class="markdown"
+                        dangerouslySetInnerHTML={{ __html: html }}
+                      />
+                    </section>
+                  </div>
+                </>
               ) : (
                 <article
                   class="markdown reading"
@@ -424,6 +487,9 @@ function App() {
             </div>
           )}
         </main>
+        {ready && project && (
+          <Chat key={project} project={project} onSaved={chatSaved} />
+        )}
       </div>
       <dialog
         class="modal"

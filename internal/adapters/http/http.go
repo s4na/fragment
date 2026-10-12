@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/s4na/fragment/internal/app"
+	"github.com/s4na/fragment/internal/chat"
 	"github.com/s4na/fragment/internal/render"
 )
 
@@ -26,6 +27,7 @@ type Server struct {
 	mu                       sync.Mutex
 	consumed                 bool
 	Assets                   fs.FS
+	Chat                     *chat.Manager
 }
 
 func secret() string {
@@ -109,6 +111,36 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	key := app.Key{Project: q.Get("project"), Kind: q.Get("kind"), Path: q.Get("path")}
 	switch r.URL.Path {
+	case "/api/chat":
+		if s.Chat == nil {
+			writeError(w, app.Fail("unavailable", "Codexチャットは利用できません"))
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			value, e := s.Chat.State(q.Get("project"))
+			if e != nil {
+				writeError(w, e)
+				return
+			}
+			writeJSON(w, 200, value)
+		case http.MethodPost:
+			var in struct {
+				Text string `json:"text"`
+			}
+			if e := decode(w, r, &in); e != nil {
+				writeError(w, e)
+				return
+			}
+			value, e := s.Chat.Send(ctx, q.Get("project"), in.Text)
+			if e != nil {
+				writeError(w, e)
+				return
+			}
+			writeJSON(w, 202, value)
+		default:
+			w.WriteHeader(405)
+		}
 	case "/api/session":
 		if r.Method != http.MethodGet {
 			w.WriteHeader(405)
@@ -261,18 +293,24 @@ func writeError(w http.ResponseWriter, err error) {
 	switch e.Code {
 	case "invalid_input":
 		status = 400
-	case "config_error", "conflict", "already_exists":
+	case "config_error", "conflict", "already_exists", "chat_busy", "reread_required":
 		status = 409
 	case "not_found":
 		status = 404
 	case "too_large":
 		status = 413
-	case "lock_timeout":
+	case "lock_timeout", "unavailable":
 		status = 503
 	case "unauthorized":
 		status = 401
 	case "forbidden":
 		status = 403
 	}
-	writeJSON(w, status, map[string]any{"error": e})
+	response := map[string]any{"error": e}
+	if e.Code == "conflict" || e.Code == "already_exists" || e.Code == "reread_required" {
+		response["retry_required"] = true
+		response["next_action"] = "get_document"
+		response["message"] = "最新データを再取得し、既存の内容を確認して変更案を作り直し、リトライしてください。"
+	}
+	writeJSON(w, status, response)
 }

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -117,18 +116,9 @@ func openDesktop(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-	service, store, err := cli.Service()
+	_, store, err := cli.Service()
 	if err != nil {
 		return err
-	}
-	if project != "" {
-		projects, err := service.Projects(ctx)
-		if err != nil {
-			return err
-		}
-		if !slices.Contains(projects, project) {
-			return app.Fail("not_found", "指定したプロジェクトが共通保存先に見つかりません")
-		}
 	}
 	info, err := desktop.Open(ctx, store.Root, project)
 	if err != nil {

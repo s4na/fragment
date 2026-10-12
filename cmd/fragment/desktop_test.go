@@ -218,12 +218,18 @@ func TestDesktopSharedStoreLifecycle(t *testing.T) {
 	if out, err := run(temp, "open", "--no-open"); err == nil || !strings.Contains(string(out), "config_changed") {
 		t.Fatalf("changed config: %v %s", err, out)
 	}
+	if out, err := run(elsewhere, "open", project, "--no-open"); err == nil || !strings.Contains(string(out), "config_changed") {
+		t.Fatalf("old project after config change: %v %s", err, out)
+	}
 	must(elsewhere, "stop")
 	if err = json.Unmarshal(must(temp, "status"), &status); err != nil || status.Running {
 		t.Fatalf("stop: %+v %v", status, err)
 	}
 	if err = json.Unmarshal(must(elsewhere, "open", "--no-open"), &opened); err != nil || opened.Root != newRoot {
 		t.Fatalf("new explicit config: %+v %v", opened, err)
+	}
+	if out, err := run(elsewhere, "open", project, "--no-open"); err == nil || !strings.Contains(string(out), "not_found") {
+		t.Fatalf("old project after restart: %v %s", err, out)
 	}
 	must(temp, "stop")
 	must(temp, "stop")

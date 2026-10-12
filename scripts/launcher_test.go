@@ -51,6 +51,24 @@ func TestSourceHashUsesImplementationContent(t *testing.T) {
 	if hash() == before {
 		t.Fatal("implementation removal was missed")
 	}
+	asset := "web/public/logo.svg"
+	before = hash()
+	write(asset, "<svg>first</svg>")
+	if hash() == before {
+		t.Fatal("public asset addition was missed")
+	}
+	before = hash()
+	write(asset, "<svg>second</svg>")
+	if hash() == before {
+		t.Fatal("public asset update was missed")
+	}
+	before = hash()
+	if err := os.Remove(filepath.Join(root, asset)); err != nil {
+		t.Fatal(err)
+	}
+	if hash() == before {
+		t.Fatal("public asset removal was missed")
+	}
 }
 
 func TestReuseRequiresMatchingCommitSourceToolsAndBinary(t *testing.T) {

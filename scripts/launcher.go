@@ -81,6 +81,9 @@ func relevant(path string) bool {
 	if strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/__tests__/") {
 		return false
 	}
+	if strings.HasPrefix(path, "web/public/") {
+		return true
+	}
 	if strings.HasPrefix(path, "web/src/") {
 		name := filepath.Base(path)
 		return !strings.Contains(name, ".test.") && !strings.Contains(name, ".spec.")

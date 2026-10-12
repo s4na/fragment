@@ -2,33 +2,33 @@
 class Fragment < Formula
   desc "Local Markdown documents shared by CLI, MCP, and Web UI"
   homepage "https://github.com/s4na/fragment"
-  version "0.0.2"
+  version "0.0.3"
 
   on_macos do
     on_arm do
-      url "https://github.com/s4na/fragment/releases/download/v0.0.2/fragment_0.0.2_darwin_arm64.tar.gz"
-      sha256 "ec3a873899032af3a4799e6cf4a99f26ed282deaa53a9c7c78bd0fb42ced0bff"
+      url "https://github.com/s4na/fragment/releases/download/v0.0.3/fragment_0.0.3_darwin_arm64.tar.gz"
+      sha256 "821afc9c9058090a3a76d65b56dbfba7050f228d9f0e88206fa40387cb19e5af"
     end
   end
 
   on_macos do
     on_intel do
-      url "https://github.com/s4na/fragment/releases/download/v0.0.2/fragment_0.0.2_darwin_amd64.tar.gz"
-      sha256 "19c7fad9d4e74bbdcf6d36a4581c89c8e3dd54b4255bc165d2aa9a7f6f9774e6"
+      url "https://github.com/s4na/fragment/releases/download/v0.0.3/fragment_0.0.3_darwin_amd64.tar.gz"
+      sha256 "e11b6a92f826279ababb69a75cb40e700338be852ad853ea2e7290257e8fa0d2"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/s4na/fragment/releases/download/v0.0.2/fragment_0.0.2_linux_arm64.tar.gz"
-      sha256 "183967dfaf7b5062c949c0bd670e1aa84d533780a8db5f1290de5928d910e602"
+      url "https://github.com/s4na/fragment/releases/download/v0.0.3/fragment_0.0.3_linux_arm64.tar.gz"
+      sha256 "ac33df2b1ea74c7af9452322ad5e82bb46690bb0fb0fa13511330570ea48802b"
     end
   end
 
   on_linux do
     on_intel do
-      url "https://github.com/s4na/fragment/releases/download/v0.0.2/fragment_0.0.2_linux_amd64.tar.gz"
-      sha256 "870ad3fcb8de960d80406087ec753dd22298920a1006284a61d7924b10ebc653"
+      url "https://github.com/s4na/fragment/releases/download/v0.0.3/fragment_0.0.3_linux_amd64.tar.gz"
+      sha256 "748e16ffc1d8f2be46aa744843ecf5a3ada2a56b6e1faff582862778e76eb3a3"
     end
   end
 

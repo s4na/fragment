@@ -6,6 +6,46 @@ fragmentは、ローカルのドキュメントフォルダをCLI、MCP、Web UI
 
 ghqのリポジトリやブランチを切り替えても同じ保存先を参照し、Goの共通コアで操作します。PreactのWeb UIでは、保存されたMarkdownを整形して閲覧できます。
 
+## Homebrewでインストールする
+
+独自tapから、Web UIを含むビルド済みのアプリをインストールできます。Go・Node.js・pnpmは利用者側では不要です。macOS/LinuxのARM64とIntel/AMDの64bit環境向けに配布します。
+
+```sh
+brew tap s4na/fragment https://github.com/s4na/fragment
+brew install s4na/fragment/fragment
+fragment version
+fragment serve
+```
+
+このリポジトリをtapとして使うため、最初の `brew tap` にはURLが必要です。[Homebrewの独自tap](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap) の仕組みを使っています。更新は次のコマンドで行います。
+
+```sh
+brew update
+brew upgrade s4na/fragment/fragment
+```
+
+Homebrew版もソースコード版も同じDocuments配下の文書を使います。MCPへの登録は `command` に `fragment`、`args` に `["mcp"]` を指定できます。Codexチャットを使う場合は、別途Codexのインストールとログインが必要です。
+
+### マージ後の自動リリース
+
+`main`へのPRをマージすると、GitHub Actionsが最新版のmainからリリースを作ります。初回は `v0.0.1`、以後は最大の安定版タグからパッチ番号を1つ上げます。PR作成・更新、マージせずに閉じたPR、直接push、タグpushではリリース処理を実行しません。閉じたPRのイベント自体は発生しますが、マージ済みのときだけジョブが動きます。lint・testは引き続きローカルで実行します。
+
+Web UIをビルドしてGoの実行ファイルに埋め込み、4環境分のtar.gzと `checksums.txt` をGitHub Releasesに公開します。その後、実際の配布ファイルのSHA256とバージョンを記録した `Formula/fragment.rb` をmainへ通常pushします。Formulaは最初のリリースで生成されるため、この変更のマージとリリース完了後からbrewでインストールできます。
+
+同時に複数のPRをマージした場合は最大100件を待ち行列に置き、リリースを直列実行します。ジョブの開始順がマージ順と違っても、処理開始時の最新mainをビルドするため古い実装に戻りません。同じPRの再実行は予約済みタグを再利用し、パッチ番号を増やしません。公開済みの配布ファイルは置き換えず、Formula更新だけ失敗した場合は同じジョブを再実行して復旧できます。後続の版がある場合、古いジョブの再実行ではFormulaを戻しません。
+
+追加のリポジトリや個人トークンは不要です。このリポジトリの `GITHUB_TOKEN` に `contents: write` を付け、タグ・Release・Formulaを更新します。mainへのbotの直接pushを禁止するブランチ保護を設定した場合は、そのpushを許可する構成が必要です。権限やビルドのエラーがあればジョブは失敗し、古いFormulaを新しい版として公開しません。
+
+リリース用のローカルビルドは、変更をコミットし、Web UIをビルドしたあと次のコマンドで確認できます。公開処理は行わず、生成物は現在のworktreeのgitignore対象 `bin/release/v0.0.1/` に置きます。
+
+```sh
+sfw pnpm --dir web install --frozen-lockfile
+sfw pnpm --dir web build
+go run ./scripts/release build --version v0.0.1 --commit "$(git rev-parse HEAD)"
+```
+
+`fragment version` は配布版では `version` とビルド元の `commit` を、ソースコード版では `version: "dev"` と実装内容の指紋を返します。Homebrewの実行ファイルはCellarで管理され、開発用worktreeのビルド結果とは独立しています。
+
 ## CLIを実行する
 
 ソースコードから使う場合は、リポジトリ直下の `fragment` スクリプトを実行します。事前の `make` は不要です。
@@ -39,7 +79,7 @@ make check
 
 Goの書き込みテストは実行中だけの一時フォルダを使い、終了後に削除します。利用者のDocuments配下の文書は変更しません。通常の `make check` はCodexの実際の推論を実行しません。
 
-`make lint` はローカルでコードをチェックします。Goの整形漏れ（`gofmt`）と不具合の兆候（`go vet`）、Web UIの問題（Biome）とTypeScriptの型エラーを調べ、問題があれば失敗します。コードの自動修正やアプリの起動は行いません。GitHub Actionsの設定は追加せず、PRを出す前に手元で実行する使い方です。Biomeは[公式の導入手順](https://biomejs.dev/installation/quick-start/)に従い、バージョンを固定しています。
+`make lint` はローカルでコードをチェックします。Goの整形漏れ（`gofmt`）と不具合の兆候（`go vet`）、Web UIの問題（Biome）とTypeScriptの型エラーを調べ、問題があれば失敗します。コードの自動修正やアプリの起動は行いません。GitHub Actionsではlint・testを実行せず、PRを出す前に手元で実行する使い方です。Biomeは[公式の導入手順](https://biomejs.dev/installation/quick-start/)に従い、バージョンを固定しています。
 
 Go側だけなら `make lint-go`、Web UI側だけなら `make lint-web` で実行できます。Goのチェックでも、画面を実行ファイルに埋め込むために先にWeb UIをビルドします。Goの整形漏れは、表示されたファイルに `gofmt -w <ファイル>` を実行して直してください。
 

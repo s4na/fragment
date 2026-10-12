@@ -21,7 +21,8 @@ import (
 	"github.com/s4na/fragment/web"
 )
 
-// Set by the source launcher, independently of Go's VCS directory detection.
+// Set by the source launcher or release build, independently of VCS detection.
+var buildVersion = "dev"
 var buildCommit = "unknown"
 var buildSource = "unknown"
 
@@ -38,7 +39,7 @@ func run(ctx context.Context, args []string) error {
 		if len(args) != 1 {
 			return app.Fail("invalid_input", "fragment version")
 		}
-		return json.NewEncoder(os.Stdout).Encode(map[string]string{"commit": buildCommit, "source": buildSource})
+		return json.NewEncoder(os.Stdout).Encode(map[string]string{"version": buildVersion, "commit": buildCommit, "source": buildSource})
 	}
 	if len(args) > 0 && (args[0] == "mcp" || args[0] == "serve") {
 		s, store, err := cli.Service()

@@ -3,12 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit && vite build"
+    "build": "tsc --noEmit && vite build",
+    "lint": "biome lint --error-on-warnings src && tsc --noEmit"
   },
   "dependencies": {
     "preact": "^11.0.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.2"
   }

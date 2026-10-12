@@ -249,14 +249,18 @@ function App() {
           <span class="brand-icon">f</span>fragment
         </a>
         <span class="topbar-note">考えを残す、文書を育てる。</span>
-        <button disabled={!ready || busy} onClick={refresh}>
+        <button type="button" disabled={!ready || busy} onClick={refresh}>
           ↻ 更新
         </button>
       </header>
       {error && (
         <div class="alert" role="alert">
           {error}
-          <button aria-label="メッセージを閉じる" onClick={() => setError("")}>
+          <button
+            type="button"
+            aria-label="メッセージを閉じる"
+            onClick={() => setError("")}
+          >
             ×
           </button>
         </div>
@@ -266,6 +270,7 @@ function App() {
           <div class="section-label">
             PROJECTS
             <button
+              type="button"
               aria-label="プロジェクトを作成"
               disabled={!ready || busy}
               onClick={() => {
@@ -294,9 +299,11 @@ function App() {
               </option>
             ))}
           </select>
+          {/* biome-ignore lint/a11y/useSemanticElements: This group switches document locations; it contains no form fields. */}
           <div class="kinds" role="group" aria-label="文書の保存場所">
             {(["flow", "stock"] as Kind[]).map((k) => (
               <button
+                type="button"
                 key={k}
                 class={kind === k ? "active" : ""}
                 aria-pressed={kind === k}
@@ -310,6 +317,7 @@ function App() {
           <div class="section-label">
             DOCUMENTS
             <button
+              type="button"
               aria-label="文書を作成"
               disabled={!project || busy}
               onClick={() => {
@@ -325,6 +333,7 @@ function App() {
           <nav class="files" aria-label="文書一覧">
             {paths.map((p) => (
               <button
+                type="button"
                 key={p}
                 class={doc?.path === p ? "file selected" : "file"}
                 disabled={busy}
@@ -339,6 +348,7 @@ function App() {
           </nav>
           {next && (
             <button
+              type="button"
               disabled={busy}
               onClick={() => void work(() => list(project, kind, next))}
             >
@@ -369,6 +379,7 @@ function App() {
                   {editing ? (
                     <>
                       <button
+                        type="button"
                         disabled={busy}
                         onClick={() => {
                           if (canLeave()) {
@@ -382,6 +393,7 @@ function App() {
                         編集を閉じる
                       </button>
                       <button
+                        type="button"
                         class="primary"
                         disabled={busy || latest !== null}
                         onClick={save}
@@ -390,7 +402,11 @@ function App() {
                       </button>
                     </>
                   ) : (
-                    <button disabled={busy} onClick={() => setEditing(true)}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setEditing(true)}
+                    >
                       編集
                     </button>
                   )}
@@ -409,6 +425,7 @@ function App() {
                       </p>
                       <pre>{latest.content}</pre>
                       <button
+                        type="button"
                         disabled={busy || draft === conflictDraft}
                         onClick={retrySave}
                       >
@@ -431,6 +448,7 @@ function App() {
                       <div class="preview-heading">
                         <span>プレビュー</span>
                         <button
+                          type="button"
                           disabled={busy}
                           onClick={() =>
                             void work(async () => {
@@ -474,6 +492,7 @@ function App() {
               </p>
               {ready && project && (
                 <button
+                  type="button"
                   class="primary"
                   disabled={busy}
                   onClick={() => {
@@ -544,4 +563,6 @@ function App() {
     </div>
   );
 }
-render(<App />, document.getElementById("app")!);
+const rootElement = document.getElementById("app");
+if (!rootElement) throw new Error("画面の表示先が見つかりません");
+render(<App />, rootElement);

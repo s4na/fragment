@@ -194,6 +194,9 @@ function App() {
 	async function listAll() {
 		await listMore(true);
 	}
+	useEffect(() => {
+		if (next && (filter.trim() || palette)) void work(listAll);
+	}, [next, filter, palette]);
 	async function load(p: string, k: Kind, path: string) {
 		const id = ++ticket.current;
 		const value = await api<Document>(`/api/document?${query(p, k, path)}`);
@@ -290,24 +293,29 @@ function App() {
 	// 保存と競合後のリトライは同じ処理。リトライは再取得済みのリビジョンで送る。
 	function put(revision: string, conflictMessage: string) {
 		if (!doc) return;
+		const id = ticket.current;
 		void work(async () => {
 			try {
 				await api(`/api/document?${query(project, kind, doc.path)}`, "PUT", {
 					content: draft,
 					revision,
 				});
-				await load(project, kind, doc.path);
-				toast("保存しました");
 			} catch (e) {
+				if (id !== ticket.current) return;
 				if (e instanceof APIError && e.code === "conflict") {
-					setConflictDraft(draft);
-					setLatest(
-						await api<Document>(`/api/document?${query(project, kind, doc.path)}`),
+					const value = await api<Document>(
+						`/api/document?${query(project, kind, doc.path)}`,
 					);
+					if (id !== ticket.current) return;
+					setConflictDraft(draft);
+					setLatest(value);
 					throw new Error(conflictMessage);
 				}
 				throw e;
 			}
+			if (id !== ticket.current) return;
+			await load(project, kind, doc.path);
+			toast("保存しました");
 		});
 	}
 	function save() {
